@@ -2,56 +2,55 @@
 
 ## 描述
 
-金融新闻实时监控和分析工具。支持多源新闻爬取、智能去重、股票相关性筛选和数据导出。
+金融新闻实时监控和分析工具。基于 RSS 源与 yfinance 拉取新闻，支持智能去重、关键词与来源筛选、按时间过滤和数据导出。
 
 ## 功能
 
-- 📰 多源新闻爬取（新浪、腾讯、东方财富等）
-- 🔍 智能去重和筛选
-- 📊 股票相关性识别
-- 💾 JSON/CSV/Markdown 导出
-- ⏰ 定时监控
-- 🎯 关键词搜索
+- RSS 源新闻拉取（Bloomberg、CNBC、Reuters、WSJ、FT、MarketWatch 等，标准库解析，不依赖 feedparser）
+- yfinance ticker 级新闻拉取（Yahoo Finance，免费、无需 API key）
+- 智能去重（按 URL 精确去重 + 按标题相似度去重）
+- 关键词、来源、时间范围筛选
+- JSON / JSONL / CSV 导出
 
 ## 使用方法
 
-### 爬取新闻
+核心功能以 Python 函数形式提供在 `src/` 下，可直接调用组合。
 
-```bash
-# 爬取单个新闻源
-python scripts/crawl.py --source sina
+### 拉取新闻
 
-# 爬取所有新闻源
-python scripts/crawl.py --all
+```python
+from src.sources import KNOWN_FEEDS, fetch_rss, fetch_yfinance_news
 
-# 定时爬取（每小时）
-python scripts/crawl.py --all --interval 3600
+# 从 RSS 源拉取（KNOWN_FEEDS 内置常见财经媒体）
+items = fetch_rss(KNOWN_FEEDS["bloomberg_markets"], max_items=20)
+
+# 从 yfinance 拉取某 ticker 的新闻
+items += fetch_yfinance_news("AAPL", max_items=20)
 ```
 
-### 查看新闻
+### 筛选与去重
 
-```bash
-# 查看最新新闻
-python scripts/view.py --limit 20
+```python
+from src.filter_export import (
+    filter_keywords, filter_by_source, filter_recent,
+    dedupe_by_url, dedupe_by_title,
+)
 
-# 搜索关键词
-python scripts/view.py --search "新能源" --limit 10
-
-# 查看统计
-python scripts/view.py --stats
+items = filter_keywords(items, ["earnings", "Fed"], mode="any")
+items = filter_by_source(items, ["rss:"])     # 前缀匹配所有 RSS 源
+items = filter_recent(items, days=7)
+items = dedupe_by_url(items)
+items = dedupe_by_title(items, similarity_threshold=0.85)
 ```
 
 ### 导出数据
 
-```bash
-# 导出 JSON
-python scripts/export.py --format json --output news.json
+```python
+from src.filter_export import export_json, export_jsonl, export_csv
 
-# 导出 CSV
-python scripts/export.py --format csv --output news.csv
-
-# 导出 Markdown 日报
-python scripts/export.py --format markdown --output report.md
+export_json(items, "news.json")
+export_jsonl(items, "news.jsonl")
+export_csv(items, "news.csv")
 ```
 
 ## 安装
@@ -62,23 +61,21 @@ pip install -r requirements.txt
 
 ## 依赖
 
-- requests>=2.31.0
-- beautifulsoup4>=4.12.0
-- pandas>=2.0.0
-- lxml>=4.9.0
+- RSS 拉取与解析：仅用 Python 标准库（`urllib`、`re`），无需第三方包
+- yfinance 新闻拉取（可选）：`yfinance>=0.2.0`，仅在调用 `fetch_yfinance_news` 时需要
 
 ## 支持的新闻源
 
-- 新浪财经
-- 腾讯财经
-- 东方财富
-- 第一财经
-- 财新网
-- 证券时报
-- 中国证券网
-- 金融界
-- 和讯网
-- 凤凰财经
+内置 `KNOWN_FEEDS` RSS 源：
+
+- Bloomberg Markets / Economics
+- CNBC Top News
+- Reuters Business & Finance
+- WSJ World News
+- Financial Times
+- MarketWatch Top Stories
+
+`fetch_rss` 为通用解析器，可传入任意标准 RSS feed URL。另支持通过 `fetch_yfinance_news` 拉取 Yahoo Finance 的 ticker 级新闻。
 
 ## 输出格式
 
@@ -87,27 +84,24 @@ pip install -r requirements.txt
 {
   "title": "新闻标题",
   "url": "https://...",
-  "source": "sina",
-  "time": "2026-03-01 14:00:00",
-  "summary": "新闻摘要"
+  "source": "rss:feeds.bloomberg.com",
+  "published_at": "Mon, 15 Jan 2026 09:00:00 GMT",
+  "summary": "新闻摘要",
+  "ticker": null
 }
 ```
 
 ### CSV
 ```csv
-title,url,source,time,summary
-"新闻标题","https://...","sina","2026-03-01 14:00:00","摘要"
+title,url,source,published_at,summary,ticker
+"新闻标题","https://...","rss:feeds.bloomberg.com","Mon, 15 Jan 2026 09:00:00 GMT","摘要",""
 ```
 
 ## 注意事项
 
-- 遵守网站爬取规则
-- 建议设置合理的爬取间隔
+- 遵守各 RSS 源与数据提供方的使用条款
+- 建议设置合理的拉取间隔，避免频繁请求
 - 数据仅供学习研究
-
-## 作者
-
-派蒙 (Paimon) - 基于 FinnewsHunter 二次开发
 
 ## 许可证
 
